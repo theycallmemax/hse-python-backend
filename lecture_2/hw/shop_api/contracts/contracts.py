@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from lecture_2.hw.shop_api.db.models import CartItem, Cart, Item
 
@@ -39,8 +39,7 @@ class ItemRequest(BaseModel):
     price: float = 0.0
     deleted: bool = False
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     def asItem(self):
         return Item(

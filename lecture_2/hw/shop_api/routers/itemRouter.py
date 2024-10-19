@@ -48,7 +48,7 @@ def replaceItem(id: int, item: ItemRequest = None):
 def changeItem(id: int, newFields: dict = {}):
     try:
         for field in newFields.keys():
-            if field not in ItemRequest.__fields__:
+            if field not in ItemRequest.model_fields:
                 raise HTTPException(status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Field not found")
 
         item = Item(
