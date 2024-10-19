@@ -1,46 +1,51 @@
 from dataclasses import dataclass, field
 from uuid import uuid4
+import random
+import string
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
 
-
 @dataclass(slots=True)
 class Broadcaster:
-    subscribers: list[WebSocket] = field(init=False, default_factory=list)
+    # Теперь у нас есть разные чаты
+    chats: dict[str, list[WebSocket]] = field(init=False, default_factory=dict)
 
-    async def subscribe(self, ws: WebSocket) -> None:
+    async def subscribe(self, chat_name: str, ws: WebSocket) -> None:
         await ws.accept()
-        self.subscribers.append(ws)
+        if chat_name not in self.chats:
+            self.chats[chat_name] = []
+        self.chats[chat_name].append(ws)
 
-    async def unsubscribe(self, ws: WebSocket) -> None:
-        self.subscribers.remove(ws)
+    async def unsubscribe(self, chat_name: str, ws: WebSocket) -> None:
+        self.chats[chat_name].remove(ws)
+        if not self.chats[chat_name]:
+            del self.chats[chat_name]
 
-    async def publish(self, message: str) -> None:
-        for ws in self.subscribers:
+    async def publish(self, chat_name: str, message: str) -> None:
+        for ws in self.chats.get(chat_name, []):
             await ws.send_text(message)
 
 
 broadcaster = Broadcaster()
 
+# Функция для генерации случайного имени пользователя
+def generate_username() -> str:
+    return ''.join(random.choices(string.ascii_letters, k=8))
 
-@app.post("/publish")
-async def post_publish(request: Request):
-    message = (await request.body()).decode()
-    await broadcaster.publish(message)
-
-
-@app.websocket("/subscribe")
-async def ws_subscribe(ws: WebSocket):
-    client_id = uuid4()
-    await broadcaster.subscribe(ws)
-    await broadcaster.publish(f"client {client_id} subscribed")
+@app.websocket("/chat/{chat_name}")
+async def ws_chat(ws: WebSocket, chat_name: str):
+    username = generate_username()  # Генерация случайного имени пользователя
+    await broadcaster.subscribe(chat_name, ws)
+    await broadcaster.publish(chat_name, f"{username} присоединился к чату")
 
     try:
         while True:
+            # Получение текста от клиента
             text = await ws.receive_text()
-            await broadcaster.publish(text)
+            # Отправка сообщения всем пользователям в чате
+            await broadcaster.publish(chat_name, f"{username} :: {text}")
     except WebSocketDisconnect:
-        broadcaster.unsubscribe(ws)
-        await broadcaster.publish(f"client {client_id} unsubscribed")
+        await broadcaster.unsubscribe(chat_name, ws)
+        await broadcaster.publish(chat_name, f"{username} покинул чат")
